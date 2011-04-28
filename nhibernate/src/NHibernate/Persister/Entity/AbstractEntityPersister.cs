@@ -2194,8 +2194,14 @@ namespace NHibernate.Persister.Entity
 			return GenerateUpdateString(includeProperty, j, null, useRowId);
 		}
 
-		/// <summary> Generate the SQL that updates a row by id (and version)</summary>
+				/// <summary> Generate the SQL that updates a row by id (and version)</summary>
 		protected internal SqlCommandInfo GenerateUpdateString(bool[] includeProperty, int j, object[] oldFields, bool useRowId)
+		{
+			return GenerateUpdateString(includeProperty, j, oldFields, useRowId, false);
+		}
+
+		/// <summary> Generate the SQL that updates a row by id (and version)</summary>
+		protected internal SqlCommandInfo GenerateUpdateString(bool[] includeProperty, int j, object[] oldFields, bool useRowId, bool nullVersion)
 		{
 			SqlUpdateBuilder updateBuilder = new SqlUpdateBuilder(Factory.Dialect, Factory)
 				.SetTableName(GetTableName(j));
@@ -2224,8 +2230,15 @@ namespace NHibernate.Persister.Entity
 				// check it (unless this is a "generated" version column)!
 				if (CheckVersion(includeProperty))
 				{
-					updateBuilder.SetVersionColumn(new string[] { VersionColumnName }, VersionType);
-					hasColumns = true;
+					if(nullVersion == false)
+					{
+						updateBuilder.SetVersionColumn(new string[] { VersionColumnName }, VersionType);
+						hasColumns = true;
+					}
+					else
+					{
+						updateBuilder.AddWhereFragment(VersionColumnName + " is null");
+					}
 				}
 			}
 			else if (entityMetamodel.OptimisticLockMode > Versioning.OptimisticLock.Version && oldFields != null)
@@ -2365,6 +2378,11 @@ namespace NHibernate.Persister.Entity
 
 		protected virtual SqlCommandInfo GenerateDeleteString(int j)
 		{
+			return GenerateDeleteString(j, false);
+		}
+
+		protected virtual SqlCommandInfo GenerateDeleteString(int j, bool nullVersion)
+		{
 			var deleteBuilder = new SqlDeleteBuilder(Factory.Dialect, Factory);
 			deleteBuilder
 				.SetTableName(GetTableName(j))
@@ -2373,7 +2391,15 @@ namespace NHibernate.Persister.Entity
 			// NH: Only add version to where clause if optimistic lock mode is Version
 			if (j == 0 && IsVersioned && entityMetamodel.OptimisticLockMode == Versioning.OptimisticLock.Version)
 			{
-				deleteBuilder.SetVersionColumn(new[] { VersionColumnName }, VersionType);
+				if(nullVersion == false)
+				{
+					deleteBuilder.SetVersionColumn(new[] { VersionColumnName }, VersionType);
+				}
+				else
+				{
+					deleteBuilder.AddWhereFragment(VersionColumnName + " is null");
+				}
+				
 			}
 
 			if (Factory.Settings.IsCommentsEnabled)
@@ -2738,7 +2764,7 @@ namespace NHibernate.Persister.Entity
 					// Write any appropriate versioning conditional parameters
 					if (useVersion && Versioning.OptimisticLock.Version == entityMetamodel.OptimisticLockMode)
 					{
-						if (CheckVersion(includeProperty))
+						if (CheckVersion(includeProperty) && oldVersion != null)
 							VersionType.NullSafeSet(statement, oldVersion, index, session);
 					}
 					else if (entityMetamodel.OptimisticLockMode > Versioning.OptimisticLock.Version && oldFields != null)
@@ -2802,13 +2828,13 @@ namespace NHibernate.Persister.Entity
 			catch (DbException sqle)
 			{
 				var exceptionContext = new AdoExceptionContextInfo
-				                       	{
-				                       		SqlException = sqle,
-				                       		Message = "could not update: " + MessageHelper.InfoString(this, id, Factory),
-				                       		Sql = sql.Text.ToString(),
-																	EntityName = EntityName,
-																	EntityId = id
-				                       	};
+				{
+					SqlException = sqle,
+					Message = "could not update: " + MessageHelper.InfoString(this, id, Factory),
+					Sql = sql.Text.ToString(),
+					EntityName = EntityName,
+					EntityId = id
+				};
 				throw ADOExceptionHelper.Convert(Factory.SQLExceptionConverter, exceptionContext);
 			}
 		}
@@ -2874,7 +2900,10 @@ namespace NHibernate.Persister.Entity
 					// We should use the _current_ object state (ie. after any updates that occurred during flush)
 					if (useVersion)
 					{
-						VersionType.NullSafeSet(statement, version, index, session);
+						if(version != null)
+						{
+							VersionType.NullSafeSet(statement, version, index, session);
+						}
 					}
 					else if (entityMetamodel.OptimisticLockMode > Versioning.OptimisticLock.Version && loadedState != null)
 					{
@@ -2957,8 +2986,10 @@ namespace NHibernate.Persister.Entity
 			// in the process of being deleted.
 			if (entry == null && !IsMutable)
 				throw new InvalidOperationException("Updating immutable entity that is not in session yet!");
-			
-			if (entityMetamodel.IsDynamicUpdate && dirtyFields != null)
+
+			bool isModifiableEntity = IsModifiableEntity(entry);
+
+			if ((oldVersion == null && isModifiableEntity) || (entityMetamodel.IsDynamicUpdate && dirtyFields != null))
 			{
 				// For the case of dynamic-update="true", we need to generate the UPDATE SQL
 				propsToUpdate = GetPropertiesToUpdate(dirtyFields, hasDirtyCollection);
@@ -2967,11 +2998,11 @@ namespace NHibernate.Persister.Entity
 				for (int j = 0; j < span; j++)
 				{
 					updateStrings[j] = tableUpdateNeeded[j]
-															? GenerateUpdateString(propsToUpdate, j, oldFields, j == 0 && rowId != null)
+															? GenerateUpdateString(propsToUpdate, j, oldFields, j == 0 && rowId != null, oldVersion == null)
 															: null;
 				}
 			}
-			else if (!IsModifiableEntity(entry))
+			else if (!isModifiableEntity)
 			{
 				// We need to generate UPDATE SQL when a non-modifiable entity (e.g., read-only or immutable)
 				// needs:
@@ -2987,7 +3018,7 @@ namespace NHibernate.Persister.Entity
 				updateStrings = new SqlCommandInfo[span];
 				for (int j = 0; j < span; j++)
 				{
-					updateStrings[j] = tableUpdateNeeded[j] ? GenerateUpdateString(propsToUpdate, j, oldFields, j == 0 && rowId != null) : null;
+					updateStrings[j] = tableUpdateNeeded[j] ? GenerateUpdateString(propsToUpdate, j, oldFields, j == 0 && rowId != null, oldVersion == null) : null;
 				}
 			}
 			else
@@ -3087,7 +3118,24 @@ namespace NHibernate.Persister.Entity
 			else
 			{
 				// otherwise, utilize the static delete statements
-				deleteStrings = SqlDeleteStrings;
+
+				if(version != null)
+				{
+					deleteStrings = SqlDeleteStrings;
+				}
+				else
+				{
+					// This case is not expected to happen very often, 
+					// so we won't cache the delete statements for it.
+					var joinSpan = TableSpan;
+
+					deleteStrings = new SqlCommandInfo[joinSpan];
+					for (int i = 0; i < joinSpan; i++ )
+					{
+						deleteStrings[i] = GenerateDeleteString(i, true);
+					}
+				}
+				
 			}
 
 			for (int j = span - 1; j >= 0; j--)

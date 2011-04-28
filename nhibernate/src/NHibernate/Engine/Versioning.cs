@@ -28,13 +28,25 @@ namespace NHibernate.Engine
 		/// <returns>Returns the next value for the version.</returns>
 		public static object Increment(object version, IVersionType versionType, ISessionImplementor session)
 		{
-			object next = versionType.Next(version, session);
-			if (log.IsDebugEnabled)
+			object next;
+
+			if(version == null)
 			{
-				log.Debug(
-					string.Format("Incrementing: {0} to {1}", versionType.ToLoggableString(version, session.Factory),
-												versionType.ToLoggableString(next, session.Factory)));
+				// This is a special case for when we are updating an existing
+				// database where version numbers can be null
+				next = Seed(versionType, session);
 			}
+			else
+			{
+				next = versionType.Next(version, session);
+				if (log.IsDebugEnabled)
+				{
+					log.Debug(
+						string.Format("Incrementing: {0} to {1}", versionType.ToLoggableString(version, session.Factory),
+													versionType.ToLoggableString(next, session.Factory)));
+				}
+			}
+
 			return next;
 		}
 
