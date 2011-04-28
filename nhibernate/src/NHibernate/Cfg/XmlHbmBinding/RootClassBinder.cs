@@ -208,6 +208,10 @@ namespace NHibernate.Cfg.XmlHbmBinding
 			var property = new Property(simpleValue);
 			BindProperty(versionSchema, property, inheritedMetas);
 
+			// XXX should this depend on the schema?
+			//property.IsNullable = true; // no setter
+			property.IsOptional = true; // this property is never written to except here??!
+
 			// for version properties marked as being generated, make sure they are "always"
 			// generated; "insert" is invalid. This is dis-allowed by the schema, but just to make
 			// sure...

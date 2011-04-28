@@ -6,6 +6,7 @@ using NHibernate.Exceptions;
 using NHibernate.Impl;
 using NHibernate.Persister.Entity;
 using NHibernate.SqlCommand;
+using NHibernate.SqlTypes;
 
 namespace NHibernate.Dialect.Lock
 {
@@ -18,7 +19,9 @@ namespace NHibernate.Dialect.Lock
 		private static readonly IInternalLogger log = LoggerProvider.LoggerFor(typeof(UpdateLockingStrategy));
 		private readonly ILockable lockable;
 		private readonly LockMode lockMode;
-		private readonly SqlString sql;
+
+		private readonly SqlString updateNullLockSql;
+		private readonly SqlString updateNonNullLockSql;
 
 		/// <summary> 
 		/// Construct a locking strategy based on SQL UPDATE statements.
@@ -39,29 +42,42 @@ namespace NHibernate.Dialect.Lock
 			if (!lockable.IsVersioned)
 			{
 				log.Warn("write locks via update not supported for non-versioned entities [" + lockable.EntityName + "]");
-				sql = null;
+				updateNullLockSql = null;
+				updateNonNullLockSql = null;
 			}
 			else
 			{
-				sql = GenerateLockString();
+				updateNullLockSql = GenerateLockString(true);
+				updateNonNullLockSql = GenerateLockString(false);
 			}
 		}
 
-		private SqlString GenerateLockString()
+		private SqlString GenerateLockString(bool updateFoNullLock)
 		{
 			ISessionFactoryImplementor factory = lockable.Factory;
+
 			SqlUpdateBuilder update = new SqlUpdateBuilder(factory.Dialect, factory);
 			update.SetTableName(lockable.RootTableName);
 			update.SetIdentityColumn(lockable.RootTableIdentifierColumnNames, lockable.IdentifierType);
-			update.SetVersionColumn(new string[] { lockable.VersionColumnName }, lockable.VersionType);
+
+			if(updateFoNullLock)
+			{
+				update.AddWhereFragment(lockable.VersionColumnName + " is NULL");
+			}
+			else
+			{
+				update.SetVersionColumn(new string[] { lockable.VersionColumnName }, lockable.VersionType);
+			}
+
 			update.AddColumns(new string[] { lockable.VersionColumnName }, null, lockable.VersionType);
 			if (factory.Settings.IsCommentsEnabled)
 			{
 				update.SetComment(lockMode + " lock " + lockable.EntityName);
 			}
+
 			return update.ToSqlString();
 		}
-
+		
 		#region ILockingStrategy Members
 
 		public void Lock(object id, object version, object obj, ISessionImplementor session)
@@ -70,15 +86,36 @@ namespace NHibernate.Dialect.Lock
 			{
 				throw new HibernateException("write locks via update not supported for non-versioned entities [" + lockable.EntityName + "]");
 			}
+
+			SqlString sql; // = (version == null) ? updateNullLockSql : updateNonNullLockSql;
+			SqlType[] types;
+
+			if(version == null)
+			{
+				sql = updateNullLockSql;
+				types = new SqlType[] { lockable.IdAndVersionSqlTypes[0] };
+			}
+			else
+			{
+				sql = updateNonNullLockSql;
+				types = lockable.IdAndVersionSqlTypes;
+			}
+
+
 			// todo : should we additionally check the current isolation mode explicitly?
 			ISessionFactoryImplementor factory = session.Factory;
 			try
 			{
-				IDbCommand st = session.Batcher.PrepareCommand(CommandType.Text, sql, lockable.IdAndVersionSqlTypes);
+				IDbCommand st = session.Batcher.PrepareCommand(CommandType.Text, sql, types);
 				try
 				{
-					lockable.VersionType.NullSafeSet(st, version, 1, session);
-					int offset = 2;
+					int offset = 1;
+
+					if(version != null)
+					{
+						lockable.VersionType.NullSafeSet(st, version, offset, session);
+						offset++;
+					}
 
 					lockable.IdentifierType.NullSafeSet(st, id, offset, session);
 					offset += lockable.IdentifierType.GetColumnSpan(factory);
