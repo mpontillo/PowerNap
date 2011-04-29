@@ -469,6 +469,8 @@
     <Compile Include="Insertordering\InsertOrderingFixture.cs" />
     <Compile Include="Insertordering\Membership.cs" />
     <Compile Include="Insertordering\User.cs" />
+    <Compile Include="Join\JoinInteropTest.cs" />
+    <Compile Include="Join\JoinInteropModel.cs" />
     <Compile Include="LazyOneToOne\Employee.cs" />
     <Compile Include="LazyOneToOne\Employment.cs" />
     <Compile Include="LazyOneToOne\LazyOneToOneTest.cs" />
@@ -2652,6 +2654,7 @@
     <EmbeddedResource Include="NHSpecificTest\NH1291AnonExample\Mappings.hbm.xml" />
   </ItemGroup>
   <ItemGroup>
+    <EmbeddedResource Include="Join\JoinInteropMappings.hbm.xml" />
     <EmbeddedResource Include="NHSpecificTest\NH2667\Mappings.hbm.xml" />
     <EmbeddedResource Include="NHSpecificTest\NH1642\Mappings.hbm.xml" />
     <EmbeddedResource Include="Stateless\Contact.hbm.xml" />

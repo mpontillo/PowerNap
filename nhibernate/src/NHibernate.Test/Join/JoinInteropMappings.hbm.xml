@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<hibernate-mapping xmlns="urn:nhibernate-mapping-2.2"
+                   namespace="NHibernate.Test.Join"
+                   assembly="NHibernate.Test"
+                   default-lazy="false">
+  
+  <class name="Info">
+    <id name="Id">
+      <generator class="assigned"/>
+    </id>
+    <property name="Data"/>
+    <join table="ExtendedInfo" optional="true">
+      <key column="InfoId"/>
+      <property name="MoreData"/>
+    </join>
+  </class>
+  
+</hibernate-mapping>
