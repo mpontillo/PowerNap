@@ -2989,7 +2989,10 @@ namespace NHibernate.Persister.Entity
 
 			bool isModifiableEntity = IsModifiableEntity(entry);
 
-			if ((oldVersion == null && isModifiableEntity) || (entityMetamodel.IsDynamicUpdate && dirtyFields != null))
+			// Note, GetPropertiesToUpdate() will throw an execption if dirtyFields is null.
+			// Also, we must do a dynamic update if the oldVersion is null, because
+			// null version properties need a different update SQL string.
+			if (dirtyFields != null && (entityMetamodel.IsDynamicUpdate || (oldVersion == null && isModifiableEntity)))
 			{
 				// For the case of dynamic-update="true", we need to generate the UPDATE SQL
 				propsToUpdate = GetPropertiesToUpdate(dirtyFields, hasDirtyCollection);
