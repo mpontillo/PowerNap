@@ -127,6 +127,57 @@ namespace NHibernate.Test.Join
 		}
 
 		[Test]
+		public void TestUpdateData()
+		{
+			using (var session = this.OpenSession())
+			using (var tx = session.BeginTransaction())
+			{
+				var query = session.CreateQuery("from " + typeof(Info).Name);
+				var list = query.List<Info>();
+				foreach (var element in list)
+				{
+					Assert.That(element != null);
+
+					Console.WriteLine("{0} ('{1}', '{2}') -->", element.Id, element.Data, element.MoreData);
+					element.Data = string.Format("Updated {0}", element.Data);
+					Console.WriteLine("    {0} ('{1}', '{2}')", element.Id, element.Data, element.MoreData);
+					session.Update(element);
+
+					var isDirty = session.IsDirty();
+					Assert.That(isDirty == true);
+				}
+
+				tx.Commit();
+			}
+		}
+
+		[Test]
+		public void TestUpdateMoreData()
+		{
+			using (var session = this.OpenSession())
+			using (var tx = session.BeginTransaction())
+			{
+				var query = session.CreateQuery("from " + typeof(Info).Name);
+				var list = query.List<Info>();
+				foreach (var element in list)
+				{
+					Assert.That(element != null);
+
+					Console.WriteLine("{0} ('{1}', '{2}') -->", element.Id, element.Data, element.MoreData);
+					element.MoreData = string.Format("Updated {0}", element.MoreData);
+					Console.WriteLine("    {0} ('{1}', '{2}')", element.Id, element.Data, element.MoreData);
+					session.Update(element);
+
+					var isDirty = session.IsDirty();
+					Assert.That(isDirty == true);
+				}
+
+				tx.Commit();
+			}
+		}
+
+
+		[Test]
 		public void TestGetTestDataLinq()
 		{
 			using (var session = this.OpenSession())
