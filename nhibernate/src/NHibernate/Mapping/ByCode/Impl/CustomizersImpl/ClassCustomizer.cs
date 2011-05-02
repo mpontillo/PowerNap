@@ -18,6 +18,9 @@ namespace NHibernate.Mapping.ByCode.Impl.CustomizersImpl
 				throw new ArgumentNullException("explicitDeclarationsHolder");
 			}
 			explicitDeclarationsHolder.AddAsRootEntity(typeof (TEntity));
+
+			// Add an empty customizer as a way to register the class as explicity declared
+			CustomizersHolder.AddCustomizer(typeof(TEntity), (IClassMapper m) => { });
 		}
 
 		private Dictionary<string, IJoinMapper<TEntity>> JoinCustomizers
@@ -43,13 +46,15 @@ namespace NHibernate.Mapping.ByCode.Impl.CustomizersImpl
 			CustomizersHolder.AddCustomizer(typeof (TEntity), m => m.Id(member, idMapper));
 		}
 
-		public void Id(FieldInfo idProperty, Action<IIdMapper> idMapper)
+		public void Id(string notVidiblePropertyOrFieldName, Action<IIdMapper> idMapper)
 		{
-			if (idProperty != null)
+			MemberInfo member = null;
+			if (notVidiblePropertyOrFieldName != null)
 			{
-				ExplicitDeclarationsHolder.AddAsPoid(idProperty);
+				member = typeof(TEntity).GetPropertyOrFieldMatchingName(notVidiblePropertyOrFieldName);
+				ExplicitDeclarationsHolder.AddAsPoid(member);
 			}
-			CustomizersHolder.AddCustomizer(typeof(TEntity), m => m.Id(idProperty, idMapper));
+			CustomizersHolder.AddCustomizer(typeof(TEntity), m => m.Id(member, idMapper));
 		}
 
 		public void ComponentAsId<TComponent>(Expression<Func<TEntity, TComponent>> idProperty) where TComponent : class
@@ -60,6 +65,18 @@ namespace NHibernate.Mapping.ByCode.Impl.CustomizersImpl
 		public void ComponentAsId<TComponent>(Expression<Func<TEntity, TComponent>> idProperty, Action<IComponentAsIdMapper<TComponent>> idMapper) where TComponent : class
 		{
 			var member = TypeExtensions.DecodeMemberAccessExpression(idProperty);
+			var propertyPath = new PropertyPath(null, member);
+			idMapper(new ComponentAsIdCustomizer<TComponent>(ExplicitDeclarationsHolder, CustomizersHolder, propertyPath));
+		}
+
+		public void ComponentAsId<TComponent>(string notVidiblePropertyOrFieldName) where TComponent : class
+		{
+			ComponentAsId<TComponent>(notVidiblePropertyOrFieldName, x => { });
+		}
+
+		public void ComponentAsId<TComponent>(string notVidiblePropertyOrFieldName, Action<IComponentAsIdMapper<TComponent>> idMapper) where TComponent : class
+		{
+			var member = typeof(TEntity).GetPropertyOrFieldMatchingName(notVidiblePropertyOrFieldName);
 			var propertyPath = new PropertyPath(null, member);
 			idMapper(new ComponentAsIdCustomizer<TComponent>(ExplicitDeclarationsHolder, CustomizersHolder, propertyPath));
 		}
@@ -106,6 +123,13 @@ namespace NHibernate.Mapping.ByCode.Impl.CustomizersImpl
 		public void Version<TProperty>(Expression<Func<TEntity, TProperty>> versionProperty, Action<IVersionMapper> versionMapping)
 		{
 			MemberInfo member = TypeExtensions.DecodeMemberAccessExpression(versionProperty);
+			ExplicitDeclarationsHolder.AddAsVersionProperty(member);
+			CustomizersHolder.AddCustomizer(typeof(TEntity), (IClassMapper m) => m.Version(member, versionMapping));
+		}
+
+		public void Version(string notVidiblePropertyOrFieldName, Action<IVersionMapper> versionMapping)
+		{
+			var member = typeof(TEntity).GetPropertyOrFieldMatchingName(notVidiblePropertyOrFieldName);
 			ExplicitDeclarationsHolder.AddAsVersionProperty(member);
 			CustomizersHolder.AddCustomizer(typeof(TEntity), (IClassMapper m) => m.Version(member, versionMapping));
 		}
