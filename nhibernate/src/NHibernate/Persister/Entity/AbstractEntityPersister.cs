@@ -2703,12 +2703,18 @@ namespace NHibernate.Persister.Entity
 			if (!IsInverseTable(j))
 			{
 				bool isRowToUpdate;
-				if (IsNullableTable(j) && oldFields != null && IsAllNull(oldFields, j))
+				bool isNullableTable = IsNullableTable(j);
+
+				// This optimization causes problems if a non-NHibernate application leaves a row around with all NULL values
+				/*
+				if (isNullableTable && oldFields != null && IsAllNull(oldFields, j))
 				{
 					//don't bother trying to update, we know there is no row there yet
 					isRowToUpdate = false;
 				}
-				else if (IsNullableTable(j) && IsAllNull(fields, j))
+				else 
+				*/
+				if (isNullableTable && IsAllNull(fields, j))
 				{
 					//if all fields are null, we might need to delete existing row
 					isRowToUpdate = true;
